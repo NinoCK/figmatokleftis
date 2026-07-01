@@ -1,0 +1,26 @@
+{
+  "name": "figmatokleftis",
+  "version": "1.6.0",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "build:zip": "node esbuild.config.mjs --zip",
+    "build:chrome": "node esbuild.config.mjs --target=chrome",
+    "build:firefox": "node esbuild.config.mjs --target=firefox",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && npx playwright test",
+    "test:capture": "npm run build && node scripts/capture-urls.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/chrome": "^0.1.38",
+    "esbuild": "^0.25.0",
+    "jsdom": "^29.0.0",
+    "serve": "^14.2.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}
