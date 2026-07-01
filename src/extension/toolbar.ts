@@ -4,6 +4,7 @@
   // Detect Firefox in MAIN world via CSS/navigator (browser.runtime.getBrowserInfo
   // is not available in MAIN world, only in content scripts).
   const isFirefox = navigator.userAgent.includes("Firefox");
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
   // Don't create toolbar twice
   if (document.getElementById(HOST_ID)) return;
@@ -198,6 +199,15 @@
     .footer a:hover { color: rgba(255,255,255,0.6); }
     .footer a svg { flex-shrink: 0; fill: currentColor; }
 
+    .hint {
+      font-size: 10px;
+      color: rgba(255,255,255,0.4);
+      text-align: center;
+      padding: 0 14px 10px;
+      line-height: 1.35;
+    }
+    .hint b { color: rgba(255,255,255,0.7); font-weight: 600; }
+
     /* Selection highlight */
     .highlight {
       position: fixed;
@@ -298,7 +308,14 @@
 
   footer.append(statusText, stopBtn);
 
-  panel.append(dragHandle, header, actions, footer);
+  // Hint for the instant hotkey (the reliable way to capture an open menu).
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.innerHTML = isMac
+    ? "Dropdown/menu open? Press <b>⌘⇧S</b> to capture it"
+    : "Dropdown/menu open? Press <b>Ctrl+Shift+S</b> to capture it";
+
+  panel.append(dragHandle, header, actions, hint, footer);
   shadow.appendChild(panel);
 
   // --- Drag logic ---
@@ -546,8 +563,17 @@
     host.remove();
   }
 
-  // Close on Escape
+  // Close on Escape; instant capture on Ctrl/Cmd+Shift+S.
   document.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape" && !selecting) destroy();
+    if (e.key === "Escape" && !selecting) {
+      destroy();
+      return;
+    }
+    // A keypress dismisses nothing, so this captures an open dropdown/menu
+    // exactly as-is (and skips the scroll-through that would close it).
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "S" || e.key === "s")) {
+      e.preventDefault();
+      if (!selecting) capture("body", true, { skipLazyScroll: true });
+    }
   });
 })();
