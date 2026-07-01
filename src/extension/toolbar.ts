@@ -23,10 +23,9 @@
 
     .panel {
       position: fixed;
-      top: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #1e1e1e;
+      bottom: 16px;
+      right: 16px;
+      background: #32323A;
       border-radius: 14px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.08);
       font-family: "Inter", -apple-system, system-ui, sans-serif;
@@ -40,8 +39,8 @@
     }
 
     @keyframes slideIn {
-      from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
     /* Drag handle */
@@ -330,6 +329,9 @@
     if (!hasMoved) {
       hasMoved = true;
       panel.style.transform = "none";
+      // Switch from bottom/right anchoring to absolute left/top for dragging.
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
     }
     panel.style.left = newX + "px";
     panel.style.top = newY + "px";
