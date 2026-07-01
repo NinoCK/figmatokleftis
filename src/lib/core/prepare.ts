@@ -219,21 +219,26 @@ function forceLazyImages(container: Element): void {
  *    lazy loaders (common on Apple, etc.) that don't use data-src.
  * 3. Scroll back to top so all rects are measured from a consistent origin.
  */
-export async function prepareForCapture(container: Element): Promise<void> {
+export async function prepareForCapture(container: Element, skipScroll: boolean = false): Promise<void> {
   const isRoot =
     container === document.documentElement || container === document.body;
 
-  // Step 1: rewrite data-src / data-srcset attributes directly
+  // Step 1: rewrite data-src / data-srcset attributes directly (no scrolling)
   forceLazyImages(container);
 
-  // Step 2: scroll through the page to trigger IntersectionObserver lazy loaders
-  await scrollToTriggerLazyLoad(container);
+  // Steps 2-3 scroll the page, which dismisses open dropdowns/menus. When
+  // skipScroll is set (delayed capture) we leave the page as-is so overlays
+  // survive to the snapshot; the caller compensates coordinates via an offset.
+  if (!skipScroll) {
+    // Step 2: scroll through the page to trigger IntersectionObserver lazy loaders
+    await scrollToTriggerLazyLoad(container);
 
-  // Step 3: scroll to top for consistent rect measurement
-  if (isRoot) {
-    window.scrollTo(0, 0);
-  } else {
-    container.scrollTop = 0;
+    // Step 3: scroll to top for consistent rect measurement
+    if (isRoot) {
+      window.scrollTo(0, 0);
+    } else {
+      container.scrollTop = 0;
+    }
   }
 
   // Step 4: hide scrollbars so they don't eat into viewport width

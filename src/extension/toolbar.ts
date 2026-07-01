@@ -351,7 +351,7 @@
   let captureAborted = false;
   let stopTimer: ReturnType<typeof setTimeout> | null = null;
 
-  async function capture(selector: string, autoDestroy: boolean = true): Promise<void> {
+  async function capture(selector: string, autoDestroy: boolean = true, captureOpts?: { skipLazyScroll?: boolean }): Promise<void> {
     if (!window.figma?.capturePage) {
       showStatus("Error: capture script not loaded", false);
       return;
@@ -384,7 +384,7 @@
     }
 
     try {
-      const json = await window.figma.capturePage(selector);
+      const json = await window.figma.capturePage(selector, captureOpts);
       if (captureAborted) {
         ffClipboard?.reject(new Error("aborted"));
         return;
@@ -426,7 +426,9 @@
       await new Promise((r) => setTimeout(r, 1000));
     }
     if (captureAborted || !host.isConnected) { setLoading(false); return; }
-    capture("body", true);
+    // Skip the page scroll-through so the dropdown/menu you just opened
+    // stays open through the snapshot.
+    capture("body", true, { skipLazyScroll: true });
   }
 
   stopBtn.addEventListener("click", () => {

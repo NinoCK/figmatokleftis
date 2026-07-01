@@ -230,6 +230,8 @@ export interface CaptureOptions {
   skipRemoteAssetSerialization?: boolean;
   includeReactFiberTree?: boolean;
   captureDeclaredStyles?: boolean;
+  /** Skip the page scroll-through so open dropdowns/menus survive to capture. */
+  skipLazyScroll?: boolean;
   timeoutSignal?: AbortSignal;
 }
 
@@ -285,7 +287,7 @@ export interface SubmitResult {
 // ---------------------------------------------------------------------------
 
 export interface DomCaptureAPI {
-  capturePage: (selector?: string) => Promise<string>;
+  capturePage: (selector?: string, options?: { skipLazyScroll?: boolean }) => Promise<string>;
   submitCapture: (
     json: string,
     captureId: string,

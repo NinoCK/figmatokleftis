@@ -61,6 +61,7 @@ export const DEFAULT_CONFIG: Required<Omit<CaptureOptions, 'timeoutSignal'>> = {
   skipRemoteAssetSerialization: false,
   includeReactFiberTree: false,
   captureDeclaredStyles: false,
+  skipLazyScroll: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -109,6 +110,72 @@ function safeRequestAnimationFrame(callback: (timestamp: number) => void, signal
   });
 }
 
+/**
+ * Build a real child node for a ::before/::after pseudo-element that renders as
+ * an absolutely-positioned box (e.g. a toggle-switch knob). Figma cannot lay
+ * out a pseudo from styles alone, so we emit a concrete rectangle at the
+ * computed position — capturing the current on/off state via its transform.
+ *
+ * Only handles absolutely-positioned pseudos on a positioned element (the
+ * common decorative case). Returns null otherwise; the caller then keeps the
+ * pseudo as a style dict as before.
+ *
+ * ponytail: absolute box only; extend to inline/relative pseudos if needed.
+ */
+function synthesizePseudoNode(
+  element: Element,
+  pseudo: "::before" | "::after",
+  styles: Record<string, string>,
+  offset: Point,
+  view: Window & typeof globalThis,
+): ElementSnapshot | null {
+  const cs = view.getComputedStyle(element, pseudo);
+  if (cs.position !== "absolute") return null;
+
+  const ecs = view.getComputedStyle(element);
+  if (ecs.position === "static") return null; // element must be the containing block
+
+  const num = (v: string): number => parseFloat(v) || 0;
+  const w = num(cs.width);
+  const h = num(cs.height);
+  if (w <= 0 || h <= 0) return null;
+
+  const er = element.getBoundingClientRect();
+  const bl = num(ecs.borderLeftWidth);
+  const bt = num(ecs.borderTopWidth);
+  const brw = num(ecs.borderRightWidth);
+  const bbw = num(ecs.borderBottomWidth);
+
+  let x =
+    cs.left !== "auto" ? er.left + bl + num(cs.left)
+    : cs.right !== "auto" ? er.right - brw - num(cs.right) - w
+    : er.left + bl;
+  let y =
+    cs.top !== "auto" ? er.top + bt + num(cs.top)
+    : cs.bottom !== "auto" ? er.bottom - bbw - num(cs.bottom) - h
+    : er.top + bt;
+
+  // Apply the pseudo's own transform translation (e.g. the switch "on" slide).
+  const m = new view.DOMMatrix(cs.transform === "none" ? "" : cs.transform);
+  x += m.e;
+  y += m.f;
+
+  const pseudoStyles = { ...styles };
+  delete pseudoStyles.content; // a real box carries no `content`
+
+  return {
+    nodeType: Node.ELEMENT_NODE as 1,
+    id: generateNodeId(null),
+    tag: "DIV",
+    attributes: {},
+    styles: pseudoStyles,
+    rect: { x: x + offset.x, y: y + offset.y, width: w, height: h, cssWidth: w, cssHeight: h },
+    childNodes: [],
+    layoutSizingHorizontal: "FIXED",
+    layoutSizingVertical: "FIXED",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
@@ -147,7 +214,7 @@ async function captureDOMInner(
 
   if (elementOrDocument instanceof Element) {
     // Scroll through the page to trigger lazy-loaded images
-    await prepareForCapture(elementOrDocument);
+    await prepareForCapture(elementOrDocument, mergedOptions.skipLazyScroll);
     await decodeImages(Array.from(elementOrDocument.querySelectorAll("img")));
 
     const serialized = await snapshotInAnimationFrame(
@@ -191,8 +258,13 @@ async function captureDOMInner(
       fonts,
     };
   } else if (elementOrDocument instanceof Document) {
-    await prepareForCapture(elementOrDocument.documentElement);
+    await prepareForCapture(elementOrDocument.documentElement, mergedOptions.skipLazyScroll);
     await decodeImages(Array.from(elementOrDocument.images));
+
+    // When we skip the scroll-to-top (delayed capture), the page may be
+    // scrolled; shift every rect by the current scroll so coordinates stay in
+    // document space. In the normal path the page is at 0,0 so this is (0,0).
+    const rootOffset: Point = { x: window.scrollX, y: window.scrollY };
 
     const serialized = await snapshotInAnimationFrame(
       elementOrDocument.documentElement,
@@ -200,6 +272,7 @@ async function captureDOMInner(
       fontCollector,
       mergedOptions,
       ctx,
+      rootOffset,
     );
 
     const blobMap = await assetCollector.getBlobMap();
@@ -252,6 +325,7 @@ function snapshotInAnimationFrame(
   fontCollector: TypefaceProbe,
   options: CaptureOptions,
   ctx: CaptureContext,
+  initialOffset: Point = ZERO_OFFSET,
 ): Promise<SnapshotNode | null> {
   assertLayoutValid(options);
 
@@ -259,7 +333,7 @@ function snapshotInAnimationFrame(
 
   return new Promise((resolve, reject) => {
     safeRequestAnimationFrame(
-      () => resolve(snapshotNode(element, assetCollector, fontCollector, undefined, ctx)),
+      () => resolve(snapshotNode(element, assetCollector, fontCollector, undefined, ctx, initialOffset)),
       signal,
     );
 
@@ -416,10 +490,18 @@ function snapshotElement(
     const pseudoComputed = window.getComputedStyle(element, pseudo);
     const contentValue = pseudoComputed.content;
     if (contentValue && contentValue !== "none" && contentValue !== "normal") {
-      if (!pseudoElementStyles) pseudoElementStyles = {};
       const styles = diffStyles(element, pseudo);
       styles.content = contentValue;
-      pseudoElementStyles[pseudo === "::before" ? "before" : "after"] = styles;
+      // If the pseudo renders as a positioned box (e.g. a toggle-switch knob),
+      // emit it as a real child node Figma can place; otherwise keep the dict.
+      const synth = synthesizePseudoNode(element, pseudo, styles, offset, view);
+      if (synth) {
+        if (pseudo === "::before") childNodes.unshift(synth);
+        else childNodes.push(synth);
+      } else {
+        if (!pseudoElementStyles) pseudoElementStyles = {};
+        pseudoElementStyles[pseudo === "::before" ? "before" : "after"] = styles;
+      }
     }
   }
 

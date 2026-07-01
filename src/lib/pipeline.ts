@@ -88,7 +88,7 @@ function createVisibilityAwareSignal(timeout: number): AbortSignal {
  * Full capture pipeline: wait for DOM, serialize the target element, and
  * convert the result to a JSON payload string.
  */
-export async function capturePage(selector: string = 'body'): Promise<string> {
+export async function capturePage(selector: string = 'body', options?: { skipLazyScroll?: boolean }): Promise<string> {
   await waitForDOMReady();
 
   const root =
@@ -103,7 +103,7 @@ export async function capturePage(selector: string = 'body'): Promise<string> {
   let tree;
   try {
     const timeoutSignal = createVisibilityAwareSignal(10000);
-    tree = await captureDOM(root, { timeoutSignal });
+    tree = await captureDOM(root, { timeoutSignal, skipLazyScroll: options?.skipLazyScroll });
   } catch (err) {
     if (err instanceof CaptureError) {
       throw new Error(ERROR_MESSAGES[err.code] || err.message);
