@@ -289,7 +289,7 @@
     return btn;
   }
 
-  const btnScreen = makeActionBtn("screen", "Entire screen", () => capture("body", true));
+  const btnScreen = makeActionBtn("screen", "Entire screen", () => capture("body"));
   const btnSelect = makeActionBtn("select", "Select element", startSelection);
   const btnDelay = makeActionBtn("clock", "Capture in 3s", () => captureAfterDelay(3));
 
@@ -368,7 +368,7 @@
   let captureAborted = false;
   let stopTimer: ReturnType<typeof setTimeout> | null = null;
 
-  async function capture(selector: string, autoDestroy: boolean = true, captureOpts?: { skipLazyScroll?: boolean }): Promise<void> {
+  async function capture(selector: string, captureOpts?: { skipLazyScroll?: boolean }): Promise<void> {
     if (!window.figma?.capturePage) {
       showStatus("Error: capture script not loaded", false);
       return;
@@ -416,10 +416,14 @@
       }
 
       showStatus("Copied to clipboard", true);
+      // ponytail: toolbar stays open so you can capture again; close with the X or Escape.
+      setLoading(false);
       setTimeout(() => {
         if (captureAborted) return;
         showStatus("Now paste into Figma canvas", true);
-        if (autoDestroy) setTimeout(destroy, 3000);
+        setTimeout(() => {
+          if (!captureAborted) hideStatus();
+        }, 3000);
       }, 3000);
     } catch (err) {
       if (!captureAborted) {
@@ -445,7 +449,7 @@
     if (captureAborted || !host.isConnected) { setLoading(false); return; }
     // Skip the page scroll-through so the dropdown/menu you just opened
     // stays open through the snapshot.
-    capture("body", true, { skipLazyScroll: true });
+    capture("body", { skipLazyScroll: true });
   }
 
   stopBtn.addEventListener("click", () => {
@@ -573,7 +577,7 @@
     // exactly as-is (and skips the scroll-through that would close it).
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "S" || e.key === "s")) {
       e.preventDefault();
-      if (!selecting) capture("body", true, { skipLazyScroll: true });
+      if (!selecting) capture("body", { skipLazyScroll: true });
     }
   });
 })();
